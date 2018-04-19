@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 using stellar_dotnetcore_sdk;
+using stellar_dotnetcore_sdk.requests;
 using stellar_dotnetcore_sdk.responses;
 using System;
 using System.Net.Http;
@@ -19,31 +20,32 @@ namespace TestExampleConsole
         public static void Main(string[] args)
         {
             Console.WriteLine("----Create a new account----");
-
-            var account = CreateRandomAccount();
+            var keyPair1 = KeyPair.FromSecretSeed("SC6ZU646FGUJOT7Y37W6GL255OYMAJFAUF5A2EABCSW4HZXE75F36S5O");
+            var keyPair2 = KeyPair.FromSecretSeed("SCH3P6RKJI22SF7GYGPNVGL7744LV4PIHROLBCME5FZK2MRV4JZY7IRA");
+            var account = new Account(keyPair1, GetSequence(keyPair1.Address));//CreateRandomAccount();
 
             Console.WriteLine($"Address: {account.KeyPair.Address} | Secret: {account.KeyPair.SecretSeed}");
 
-            Console.WriteLine($"-----Get test XML for first account----");
-            var result = GetTestAsset(account.KeyPair.Address).GetAwaiter().GetResult();
-            Console.WriteLine($"Getting the test was successful: {result}");
+            //Console.WriteLine($"-----Get test XML for first account----");
+            //var result = GetTestAsset(account.KeyPair.Address).GetAwaiter().GetResult();
+            //Console.WriteLine($"Getting the test was successful: {result}");
 
             Console.WriteLine("----Connect to server----");
             var server = ConnectToServer(URL);
 
             Console.WriteLine("----Get balance of first account-----");
             AccountResponse accountResponse = GetBalance(account.KeyPair, server).GetAwaiter().GetResult();
-            foreach(var balance in accountResponse.Balances)
+            foreach (var balance in accountResponse.Balances)
             {
                 Console.WriteLine($"Balance: {balance.BalanceString} | Asset type: {balance.AssetType}");
             }
 
-            var account2 = CreateRandomAccount();
+            var account2 = new Account(keyPair2, GetSequence(keyPair2.Address));
 
             Console.WriteLine($"Address: {account2.KeyPair.Address} | Secret: {account2.KeyPair.SecretSeed}");
-            Console.WriteLine($"-----Get test XML for second account----");
-            var result2 = GetTestAsset(account2.KeyPair.Address).GetAwaiter().GetResult();
-            Console.WriteLine($"Getting the test was successful: {result2}");
+            //Console.WriteLine($"-----Get test XML for second account----");
+            //var result2 = GetTestAsset(account2.KeyPair.Address).GetAwaiter().GetResult();
+            //Console.WriteLine($"Getting the test was successful: {result2}");
 
             Console.WriteLine("----Get balance of second account-----");
             AccountResponse accountResponse2 = GetBalance(account2.KeyPair, server).GetAwaiter().GetResult();
@@ -52,8 +54,10 @@ namespace TestExampleConsole
                 Console.WriteLine($"Balance: {balance.BalanceString} | Asset type: {balance.AssetType}");
             }
             ///Do payment from one account to another
-            
 
+            Console.WriteLine("------Payment from one account to another--------");
+            Network.UseTestNetwork();
+            //var transactionResponse = DoPayment(account.KeyPair, account2.KeyPair, "10", server);
             /// Prevent from closing
             Console.Read();
         }
@@ -77,7 +81,7 @@ namespace TestExampleConsole
         /// <returns></returns>
         public static Server ConnectToServer(string url)
         {
-             return  new Server(url);
+            return new Server(url);
         }
 
         /// <summary>
@@ -105,7 +109,7 @@ namespace TestExampleConsole
             var client = new HttpClient();
             var response = await client.GetAsync($"https://friendbot.stellar.org?addr={addres}");
             return response.IsSuccessStatusCode;
-        } 
+        }
 
         /// <summary>
         /// Read the balances for the given account.
@@ -117,6 +121,22 @@ namespace TestExampleConsole
         public static async Task<AccountResponse> GetBalance(KeyPair keyPair, Server server)
         {
             return await server.Accounts.Account(keyPair);
+        }
+
+        public static async Task<SubmitTransactionResponse> DoPayment(KeyPair source, KeyPair destination, string amount, Server server)
+        {
+            var operation = new PaymentOperation.Builder(destination, new AssetTypeNative(), amount)
+                .SetSourceAccount(source)
+                .Build();
+            var xdr = operation.ToXdr();
+            var account = new Account(source, GetSequence(source.Address));
+            var transaction = new Transaction.Builder(account).AddOperation(operation).AddMemo(Memo.Text("New memo wohoooo")).Build();
+
+            transaction.Sign(source);
+
+            var response = await server.SubmitTransaction(transaction);
+            return response;
+
         }
     }
 }
